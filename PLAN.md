@@ -18,14 +18,19 @@ Architecture and implementation plan for a standalone FastMCP server that serves
    - The web server remains alive as long as at least one shared file is active (`max(expires_at)` across all active files).
    - Once the last file's TTL expires, the HTTP server shuts down automatically and frees the port.
 
-3. **Web UI Design**:
-   - Dark OLED aesthetic (#000000 / #0a0a0a), monospace accents, neon green/amber telemetry highlights.
-   - Fully responsive mobile & desktop layout.
-   - Shows:
-     - Custom message / note if provided (e.g. "Firmware binaries v0.2.2 for ESP32-S3").
-     - File table / cards: filename, human-readable size, MIME icon/badge, direct download button.
-     - Live countdown timer ("Available for 28m 42s" / "Server auto-destruct in 28:42") updating client-side every second via JS.
-     - Once expired, page displays a clean "Link Expired // File removed from cache" notice.
+## 3. Web UI Design
+- Dark OLED aesthetic (`#000000` / `#0a0a0a`), monospace accents, neon green/amber telemetry highlights.
+- Fully responsive mobile & desktop layout.
+- **Copy & Labels**: STRICTLY minimal, concise, telegram-style. No wordy/fluffy descriptions.
+  - Use `EXPIRY` or `EXPIRES IN` (NOT "Self destruction time / The files will delete automatically").
+  - Use `DOWNLOAD` (NOT "Download file to device").
+  - Use `SIZE` (NOT "Total file size on disk").
+  - Headers: clean and crisp (e.g. `EPHEMERAL SHARE // [ID]`).
+- Shows:
+  - Custom message / note if provided (e.g. "Firmware binaries v0.2.2 for ESP32-S3").
+  - File table / cards: filename, human-readable size, MIME badge, direct download button.
+  - Live countdown timer updating client-side every second via JS.
+  - Once expired, page displays a clean `LINK EXPIRED // 404` notice.
 
 4. **HTTP Server Stack**:
    - Built with `aiohttp` or `fastapi/uvicorn` (pure async within the FastMCP process).

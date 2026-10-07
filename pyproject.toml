@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ephemeral-share-mcp"
+version = "0.1.0"
+description = "Fast ephemeral web file sharing MCP server with sleek dark cyber UI, countdown timer, and dynamic multi-file TTL"
+readme = "README.md"
+authors = [
+    { name = "Aleph the Agent", email = "ilya2accpidor@gmail.com" }
+]
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = [
+    "fastmcp>=0.1.0",
+    "aiohttp>=3.9.0",
+]
+
+[project.scripts]
+ephemeral-share-mcp = "ephemeral_share_mcp.server:main"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
