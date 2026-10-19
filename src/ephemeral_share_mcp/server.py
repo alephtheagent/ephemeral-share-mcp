@@ -41,7 +41,7 @@ async def share_file(
     # Derive public or localhost host URL
     url = f"http://127.0.0.1:{port}/"
 
-    return {
+    ret = {
         "status": "active",
         "url": url,
         "download_url": f"http://127.0.0.1:{port}/download/{shared.file_id}/{shared.filename}",
@@ -49,8 +49,12 @@ async def share_file(
         "filename": shared.filename,
         "size": shared.formatted_size,
         "expires_in_minutes": duration_minutes,
-        "message": message
+        "message": message,
+        "is_archive": shared.is_archive,
     }
+    if shared.is_archive and shared.archive_items is not None:
+        ret["archive_items"] = shared.archive_items
+    return ret
 
 @mcp.tool()
 async def share_files(
