@@ -196,7 +196,7 @@ class ShareManager:
         )
 
         if is_archive_file(filename):
-            temp_dir = tempfile.mkdtemp(prefix=f"ephem_{file_id}_")
+            temp_dir = tempfile.mkdtemp(prefix=f"ephem_archive_{file_id}_")
             try:
                 items = extract_archive(abs_path, temp_dir)
                 shared.is_archive = True

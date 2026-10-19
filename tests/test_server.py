@@ -271,11 +271,11 @@ async def test_archive_subfile_and_subdir_download(sample_zip):
             assert zf.read("main.py") == b"print('hello from archive')"
 
         # 3. Path traversal protection on archive-file
-        bad_f = await client.get(f"/download/{shared.file_id}/archive-file/../../etc/passwd")
+        bad_f = await client.get(f"/download/{shared.file_id}/archive-file/..%2F..%2Fetc/passwd")
         assert bad_f.status == 403
 
         # 4. Path traversal protection on archive-dir
-        bad_d = await client.get(f"/download/{shared.file_id}/archive-dir/../../etc")
+        bad_d = await client.get(f"/download/{shared.file_id}/archive-dir/..%2F..%2Fetc")
         assert bad_d.status == 403
 
         # 5. Non-existent file in archive
@@ -360,3 +360,56 @@ async def test_temp_dir_cleanup_on_expiration_and_removal(sample_zip):
     assert td4 is not None and os.path.isdir(td4)
     await mgr.clear_all()
     assert not os.path.exists(td4)
+
+@pytest.mark.asyncio
+async def test_tar_slip_prevention(tmp_path):
+    bad_tar = tmp_path / "malicious.tar.gz"
+    with tarfile.open(str(bad_tar), "w:gz") as tf:
+        data = b"evil"
+        ti = tarfile.TarInfo(name="../../evil.txt")
+        ti.size = len(data)
+        tf.addfile(ti, io.BytesIO(data))
+
+    mgr = ShareManager()
+    with pytest.raises(ValueError, match="Tar slip|Directory traversal"):
+        await mgr.register_file(str(bad_tar))
+
+    assert not os.path.exists(tmp_path / "evil.txt")
+    await mgr.clear_all()
+
+@pytest.mark.asyncio
+async def test_text_preview_truncation(tmp_path):
+    from ephemeral_share_mcp.web import get_text_preview
+    long_file = tmp_path / "large.txt"
+    # Write 600 lines
+    long_file.write_text("\n".join(f"line {i}" for i in range(600)))
+    preview = get_text_preview(str(long_file), max_lines=500)
+    assert preview is not None
+    assert "line 499" in preview
+    assert "line 550" not in preview
+    assert "PREVIEW TRUNCATED" in preview
+
+@pytest.mark.asyncio
+async def test_mcp_tools(sample_zip, temp_file):
+    from ephemeral_share_mcp.server import share_file, list_shared_files, stop_share
+    # 1. Share archive via MCP tool
+    res = await share_file(sample_zip, duration_minutes=5)
+    assert res["status"] == "active"
+    assert res["is_archive"] is True
+    assert "archive_items" in res
+    fid = res["file_id"]
+
+    # 2. List shared files
+    listing = await list_shared_files()
+    assert listing["active_files_count"] >= 1
+    assert any(f["file_id"] == fid and f["is_archive"] for f in listing["files"])
+
+    # 3. Stop specific share
+    stop_res = await stop_share(fid)
+    assert stop_res["success"] is True
+
+    # 4. Stop all shares
+    await share_file(temp_file, duration_minutes=5)
+    stop_all = await stop_share()
+    assert stop_all["success"] is True
+
