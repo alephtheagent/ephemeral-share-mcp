@@ -3,7 +3,7 @@ import html
 import tempfile
 import zipfile
 from urllib.parse import quote
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 from aiohttp import web
 from .manager import manager, SharedFile
@@ -62,6 +62,83 @@ def get_text_preview(file_path: str, max_bytes: int = 65536, max_lines: int = 50
         return preview_text
     except Exception:
         return None
+
+def render_archive_tree(file_id: str, items: List[Dict[str, Any]]) -> str:
+    if not items:
+        return '<div class="archive-row"><span class="item-name" style="color:var(--dim)">[EMPTY ARCHIVE]</span></div>'
+
+    root: Dict[str, Any] = {"children": {}, "is_dir": True, "path": "", "name": "", "formatted_size": ""}
+    for it in items:
+        clean_p = it["path"].replace("\\", "/").strip("/")
+        if not clean_p:
+            continue
+        parts = clean_p.split("/")
+        curr = root
+        accum = []
+        for i, part in enumerate(parts):
+            accum.append(part)
+            curr_path = "/".join(accum)
+            is_last = (i == len(parts) - 1)
+            if part not in curr["children"]:
+                curr["children"][part] = {
+                    "name": part,
+                    "path": curr_path,
+                    "is_dir": it["is_dir"] if is_last else True,
+                    "formatted_size": it.get("formatted_size", "DIR" if it["is_dir"] else "") if is_last else "DIR",
+                    "children": {},
+                }
+            else:
+                if is_last:
+                    curr["children"][part]["is_dir"] = it["is_dir"]
+                    curr["children"][part]["formatted_size"] = it.get("formatted_size", "")
+            curr = curr["children"][part]
+
+    def render_nodes(children_dict: Dict[str, Any]) -> str:
+        sorted_nodes = sorted(
+            children_dict.values(),
+            key=lambda x: (not x["is_dir"], x["name"].lower())
+        )
+        html_out = []
+        for node in sorted_nodes:
+            name_esc = html.escape(node["name"])
+            quoted_path = quote(node["path"])
+            if node["is_dir"]:
+                dl_url = f"/download/{file_id}/archive-dir/{quoted_path}"
+                inner_html = render_nodes(node["children"])
+                html_out.append(f"""
+                <details class="archive-dir" open>
+                  <summary class="archive-row dir-summary">
+                    <div class="item-main">
+                      <span class="dir-caret">▶</span>
+                      <span class="item-name dir-name">{name_esc}/</span>
+                    </div>
+                    <div class="item-meta">
+                      <span class="item-size">DIR</span>
+                      <a class="btn-item-dl" onclick="event.stopPropagation();" href="{dl_url}">ZIP</a>
+                    </div>
+                  </summary>
+                  <div class="archive-children">
+                    {inner_html}
+                  </div>
+                </details>
+                """)
+            else:
+                dl_url = f"/download/{file_id}/archive-file/{quoted_path}"
+                html_out.append(f"""
+                <div class="archive-row file-row">
+                  <div class="item-main">
+                    <span class="file-bullet">▪</span>
+                    <span class="item-name file-name">{name_esc}</span>
+                  </div>
+                  <div class="item-meta">
+                    <span class="item-size">{node['formatted_size']}</span>
+                    <a class="btn-item-dl" href="{dl_url}">FILE</a>
+                  </div>
+                </div>
+                """)
+        return "".join(html_out)
+
+    return render_nodes(root["children"])
 
 HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
@@ -244,6 +321,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       overflow: hidden;
     }
     .archive-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
       padding: 6px 10px;
       background: #0d0d0d;
       border-bottom: 1px solid var(--border);
@@ -252,7 +332,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       color: var(--dim);
     }
     .archive-list {
-      max-height: 240px;
+      max-height: 280px;
       overflow-y: auto;
     }
     .archive-row {
@@ -269,12 +349,58 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     .archive-row:hover {
       background: #0a0a0a;
     }
+    .item-main {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      flex: 1;
+      margin-right: 12px;
+    }
+    .dir-caret {
+      display: inline-block;
+      font-size: 8px;
+      color: var(--accent);
+      transition: transform 0.15s ease;
+      width: 12px;
+      text-align: center;
+      flex-shrink: 0;
+      user-select: none;
+    }
+    details.archive-dir[open] > summary .dir-caret {
+      transform: rotate(90deg);
+    }
+    .file-bullet {
+      display: inline-block;
+      font-size: 8px;
+      color: var(--dim);
+      width: 12px;
+      text-align: center;
+      flex-shrink: 0;
+      user-select: none;
+    }
+    details.archive-dir > summary {
+      list-style: none;
+      cursor: pointer;
+      user-select: none;
+    }
+    details.archive-dir > summary::-webkit-details-marker {
+      display: none;
+    }
+    details.archive-dir > summary::marker {
+      display: none;
+      content: "";
+    }
+    .archive-children {
+      margin-left: 12px;
+      padding-left: 4px;
+      border-left: 1px dashed #222222;
+    }
     .item-name {
       font-family: "JetBrains Mono", monospace;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      margin-right: 12px;
     }
     .item-name.dir-name {
       color: var(--accent);
@@ -396,6 +522,18 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       }
     }
 
+    function toggleArchiveDirs(id) {
+      const box = document.getElementById('archive-box-' + id);
+      const btn = document.getElementById('btn-dirs-' + id);
+      if (!box || !btn) return;
+      const dirs = box.querySelectorAll('details.archive-dir');
+      const shouldOpen = btn.innerText === 'EXPAND ALL';
+      dirs.forEach(d => {
+        d.open = shouldOpen;
+      });
+      btn.innerText = shouldOpen ? 'COLLAPSE ALL' : 'EXPAND ALL';
+    }
+
     setInterval(updateTimers, 1000);
     updateTimers();
   </script>
@@ -422,40 +560,20 @@ async def index_handler(request: web.Request) -> web.Response:
         lower_name = f.filename.lower()
 
         if f.is_archive and f.archive_items is not None:
-            items_html = []
-            for it in f.archive_items:
-                path_esc = html.escape(it["path"])
-                quoted_path = quote(it["path"])
-                if it["is_dir"]:
-                    dl_url = f"/download/{f.file_id}/archive-dir/{quoted_path}"
-                    items_html.append(f"""
-                    <div class="archive-row">
-                      <span class="item-name dir-name">[DIR] {path_esc}</span>
-                      <span class="item-meta">
-                        <span class="item-size">DIR</span>
-                        <a class="btn-item-dl" href="{dl_url}">ZIP</a>
-                      </span>
-                    </div>
-                    """)
-                else:
-                    dl_url = f"/download/{f.file_id}/archive-file/{quoted_path}"
-                    items_html.append(f"""
-                    <div class="archive-row">
-                      <span class="item-name file-name">[FILE] {path_esc}</span>
-                      <span class="item-meta">
-                        <span class="item-size">{it['formatted_size']}</span>
-                        <a class="btn-item-dl" href="{dl_url}">FILE</a>
-                      </span>
-                    </div>
-                    """)
-
+            has_dirs = any(it.get("is_dir") for it in f.archive_items)
+            toggle_btn = (
+                f'<button type="button" class="btn-toggle" onclick="toggleArchiveDirs(\'{f.file_id}\')" id="btn-dirs-{f.file_id}">COLLAPSE ALL</button>'
+                if has_dirs else ""
+            )
+            tree_html = render_archive_tree(f.file_id, f.archive_items)
             preview_block = f"""
-            <div class="archive-box">
+            <div class="archive-box" id="archive-box-{f.file_id}">
               <div class="archive-header">
                 <span>ARCHIVE CONTENTS // {len(f.archive_items)} ITEMS</span>
+                {toggle_btn}
               </div>
               <div class="archive-list">
-                {''.join(items_html)}
+                {tree_html}
               </div>
             </div>
             """

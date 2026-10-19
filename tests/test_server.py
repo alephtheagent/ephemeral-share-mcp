@@ -238,6 +238,11 @@ async def test_archive_unpack_and_tree(sample_zip):
         assert "ARCHIVE CONTENTS" in text
         assert "src/main.py" in text
         assert "docs/readme.txt" in text
+        assert "archive-dir" in text
+        assert "dir-caret" in text
+        assert "archive-children" in text
+        assert "COLLAPSE ALL" in text
+        assert f"btn-dirs-{shared.file_id}" in text
     finally:
         await client.close()
 
