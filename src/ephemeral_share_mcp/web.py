@@ -128,7 +128,7 @@ def render_archive_tree(file_id: str, items: List[Dict[str, Any]]) -> str:
                 <div class="archive-row file-row">
                   <div class="item-main">
                     <span class="file-bullet">▪</span>
-                    <span class="item-name file-name">{name_esc}</span>
+                    <a class="item-name file-name" href="{dl_url}" title="Download {name_esc}">{name_esc}</a>
                   </div>
                   <div class="item-meta">
                     <span class="item-size">{node['formatted_size']}</span>
@@ -216,6 +216,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       font-weight: 600;
       word-break: break-all;
       color: #fff;
+      text-decoration: none;
+      transition: color 0.15s;
+    }
+    a.file-name:hover {
+      color: var(--accent);
+      text-decoration: underline;
     }
     .file-meta {
       display: flex;
@@ -408,6 +414,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     }
     .item-name.file-name {
       color: #cccccc;
+      text-decoration: none;
+      transition: color 0.15s;
+    }
+    .item-name.file-name:hover {
+      color: var(--accent);
+      text-decoration: underline;
     }
     .item-meta {
       display: flex;
@@ -611,7 +623,7 @@ async def index_handler(request: web.Request) -> web.Response:
 
         card = f"""
         <div class="file-card">
-          <div class="file-name">{html.escape(f.filename)}</div>
+          <a class="file-name" href="/download/{f.file_id}/{quote(f.filename)}" title="Download {html.escape(f.filename)}">{html.escape(f.filename)}</a>
           <div class="file-meta">
             <span>SIZE: {f.formatted_size}</span>
             <span>EXPIRY: <span class="expiry" data-expires="{int(f.expires_at)}">{f.remaining_seconds // 60:02d}:{f.remaining_seconds % 60:02d}</span></span>

@@ -243,6 +243,8 @@ async def test_archive_unpack_and_tree(sample_zip):
         assert "archive-children" in text
         assert "COLLAPSE ALL" in text
         assert f"btn-dirs-{shared.file_id}" in text
+        assert f'<a class="item-name file-name" href="/download/{shared.file_id}/archive-file/src/main.py"' in text
+        assert f'<a class="file-name" href="/download/{shared.file_id}/{shared.filename}"' in text
     finally:
         await client.close()
 
